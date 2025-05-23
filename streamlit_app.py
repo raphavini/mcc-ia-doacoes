@@ -81,9 +81,6 @@ def call_gemini_api(prompt_text):
     }
     
     # Obtém a chave da API das variáveis de ambiente do Streamlit Secrets
-    # Para o desenvolvimento local, você pode criar um arquivo .streamlit/secrets.toml
-    # com o conteúdo: GEMINI_API_KEY="SUA_CHAVE_AQUI"
-    # Para implantação no Streamlit Cloud, configure os segredos diretamente na plataforma.
     try:
         apiKey = st.secrets["GEMINI_API_KEY"]
     except KeyError:
@@ -191,8 +188,9 @@ Muito obrigado! 
 # Título da aplicação Streamlit
 st.title("Sistema de Doações")
 
-st.write("Digite o nome do doador e o que foi doado  (ex: 'Fulano 6 litros de leite ou Sicrano 2kg de açúcar'):")
-user_input = st.text_input("Sua Doação:")
+# Alteração para text_area com o novo texto de instrução
+st.write("Digite o nome do doador e o que foi doado (ex: 'Fulano 6 litros de leite ou Sicrano 2kg de açúcar'):")
+user_input = st.text_area("Sua Doação:", height=100) # text_area para múltiplas linhas
 
 if st.button("Registrar Doação"):
     if user_input:
