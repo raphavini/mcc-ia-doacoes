@@ -7,7 +7,7 @@ import streamlit.components.v1 as components # Importa para injetar JavaScript
 
 # Importa o Firebase Admin SDK
 import firebase_admin
-from firebase_admin import credentials, firestore, auth
+from firebase_admin import credentials, firestore # Removido 'auth' pois não será usado diretamente para signIn
 
 # --- Configuração e Inicialização do Firebase ---
 # A chave da API e a configuração do Firebase são injetadas pelo ambiente Canvas.
@@ -24,16 +24,14 @@ if not firebase_admin._apps:
             # Para testes locais, você pode carregar de um arquivo de credenciais
             # cred = credentials.Certificate("path/to/your/serviceAccountKey.json")
             # firebase_admin.initialize_app(cred)
+            st.stop() # Para a execução do app se a configuração não for encontrada
         else:
             cred = credentials.Certificate(firebase_config)
             firebase_admin.initialize_app(cred)
         
-        # Autenticação: tenta usar o token personalizado ou faz login anonimamente
-        initial_auth_token = os.environ.get('__initial_auth_token')
-        if initial_auth_token:
-            auth.sign_in_with_custom_token(initial_auth_token)
-        else:
-            auth.sign_in_anonymously()
+        # A autenticação do Admin SDK é feita automaticamente com as credenciais.
+        # Não é necessário chamar sign_in_anonymously ou sign_in_with_custom_token aqui.
+        # Essas funções são para SDKs cliente.
             
     except Exception as e:
         st.error(f"Erro ao inicializar Firebase: {e}. Verifique suas credenciais e configuração.")
@@ -94,7 +92,7 @@ def load_donations_from_firestore():
             st.info("Nenhuma lista de doações encontrada no Firestore. Usando a lista inicial.")
             return initial_donations_data
     except Exception as e:
-        st.error(f"Erro ao carregar doações do Firestore: {e}. Usando a lista inicial.")
+        st.error(f"Erro ao carregar doações do Firestore: {e}. Verifique suas regras de segurança ou conexão.")
         return initial_donations_data
 
 def save_donations_to_firestore(data):
@@ -103,7 +101,7 @@ def save_donations_to_firestore(data):
         DONATIONS_DOC_REF.set(data)
         st.success("Lista de doações salva no Firestore!")
     except Exception as e:
-        st.error(f"Erro ao salvar doações no Firestore: {e}")
+        st.error(f"Erro ao salvar doações no Firestore: {e}. Verifique suas regras de segurança ou conexão.")
 
 # Inicializa a lista de doações no session_state do Streamlit
 # Carrega do Firestore na primeira execução
