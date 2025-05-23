@@ -336,16 +336,17 @@ if st.button("Copiar Lista"):
             var text = {json.dumps(output_text_area_content)};
             var textArea = document.createElement("textarea");
             textArea.value = text;
-            // Torna o textarea temporariamente visível e selecionável
+            // Torna o textarea temporariamente visível e selecionável, mas off-screen
             textArea.style.position = "absolute";
             textArea.style.left = "-9999px";
             textArea.style.top = "0";
-            textArea.style.opacity = "0";
-            textArea.style.width = "1px";
-            textArea.style.height = "1px";
+            textArea.style.width = "1px"; // Keep it tiny
+            textArea.style.height = "1px"; // Keep it tiny
+            // Remover opacity: "0" para garantir que seja "visível" para as verificações de segurança do navegador
             document.body.appendChild(textArea);
-            textArea.focus(); // Tenta focar o elemento
-            textArea.select();
+            textArea.focus(); // Foca o elemento
+            textArea.select(); // Seleciona o conteúdo
+
             try {{
                 var successful = document.execCommand('copy');
             }} catch (err) {{
