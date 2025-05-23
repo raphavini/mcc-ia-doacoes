@@ -205,7 +205,7 @@ Muito obrigado! 
 # Título da aplicação Streamlit
 st.title("Sistema de Doações")
 
-st.write("Digite o nome do doador e o que foi doado (ex: 'Cristiane 6 litros de leite'):")
+st.write("Digite o nome do doador e o que foi doado (ex: 'Fulano 6 litros de leite ou Sicrano 2kg de açúcar'):")
 user_input = st.text_input("Sua Doação:")
 
 if st.button("Registrar Doação"):
