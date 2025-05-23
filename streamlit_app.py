@@ -5,8 +5,49 @@ import requests # Importa a biblioteca requests para fazer chamadas HTTP
 import os # Importa a biblioteca os para acessar variáveis de ambiente
 import streamlit.components.v1 as components # Importa para injetar JavaScript
 
+# Importa o Firebase Admin SDK
+import firebase_admin
+from firebase_admin import credentials, firestore, auth
+
+# --- Configuração e Inicialização do Firebase ---
+# A chave da API e a configuração do Firebase são injetadas pelo ambiente Canvas.
+# Para rodar localmente, você precisaria de um arquivo de credenciais de serviço.
+# No ambiente Canvas, __firebase_config e __initial_auth_token são globais.
+
+# Verifica se o Firebase já foi inicializado para evitar erros
+if not firebase_admin._apps:
+    try:
+        # Tenta carregar a configuração do Firebase do ambiente Canvas
+        firebase_config = json.loads(os.environ.get('__firebase_config', '{}'))
+        if not firebase_config:
+            st.error("Configuração do Firebase não encontrada. Certifique-se de que '__firebase_config' está definida no ambiente.")
+            # Para testes locais, você pode carregar de um arquivo de credenciais
+            # cred = credentials.Certificate("path/to/your/serviceAccountKey.json")
+            # firebase_admin.initialize_app(cred)
+        else:
+            cred = credentials.Certificate(firebase_config)
+            firebase_admin.initialize_app(cred)
+        
+        # Autenticação: tenta usar o token personalizado ou faz login anonimamente
+        initial_auth_token = os.environ.get('__initial_auth_token')
+        if initial_auth_token:
+            auth.sign_in_with_custom_token(initial_auth_token)
+        else:
+            auth.sign_in_anonymously()
+            
+    except Exception as e:
+        st.error(f"Erro ao inicializar Firebase: {e}. Verifique suas credenciais e configuração.")
+        st.stop() # Para a execução do app se o Firebase não puder ser inicializado
+
+db = firestore.client()
+app_id = os.environ.get('__app_id', 'default-app-id') # Obtém o ID do app do ambiente Canvas
+
+# Caminho para o documento no Firestore onde a lista de doações será armazenada
+# Usamos o app_id para isolar os dados deste aplicativo específico
+DONATIONS_DOC_REF = db.collection('artifacts').document(app_id).collection('public').document('data').collection('donations_list').document('current_list')
+
+
 # Estrutura inicial da lista de doações
-# Usamos um dicionário para facilitar a atualização e o rastreamento
 initial_donations_data = {
     "Arroz": {"total_needed": 10, "unit": "quilos", "donated_by": []},
     "Farinha de Mandioca": {"total_needed": 4, "unit": "quilos", "donated_by": []},
@@ -41,9 +82,34 @@ initial_donations_data = {
     "Creme de Leite": {"total_needed": 15, "unit": "caixinhas", "donated_by": []}
 }
 
+# --- Funções de persistência do Firestore ---
+def load_donations_from_firestore():
+    """Carrega a lista de doações do Firestore."""
+    try:
+        doc = DONATIONS_DOC_REF.get()
+        if doc.exists:
+            st.success("Lista de doações carregada do Firestore!")
+            return doc.to_dict()
+        else:
+            st.info("Nenhuma lista de doações encontrada no Firestore. Usando a lista inicial.")
+            return initial_donations_data
+    except Exception as e:
+        st.error(f"Erro ao carregar doações do Firestore: {e}. Usando a lista inicial.")
+        return initial_donations_data
+
+def save_donations_to_firestore(data):
+    """Salva a lista de doações no Firestore."""
+    try:
+        DONATIONS_DOC_REF.set(data)
+        st.success("Lista de doações salva no Firestore!")
+    except Exception as e:
+        st.error(f"Erro ao salvar doações no Firestore: {e}")
+
 # Inicializa a lista de doações no session_state do Streamlit
+# Carrega do Firestore na primeira execução
 if 'donations' not in st.session_state:
-    st.session_state.donations = initial_donations_data
+    st.session_state.donations = load_donations_from_firestore()
+
 
 def get_gemini_prompt(user_input):
     """
@@ -247,6 +313,9 @@ if st.button("Registrar Doação"):
             
             if donations_processed_count == 0:
                 st.error("Nenhuma doação válida foi extraída do texto. Por favor, tente novamente com um formato mais claro.")
+            
+            # Salva a lista atualizada no Firestore após processar todas as doações
+            save_donations_to_firestore(st.session_state.donations)
         else:
             st.error("Não foi possível processar as doações. A resposta da Gemini estava vazia ou inválida.")
             
@@ -288,4 +357,5 @@ if st.button("Copiar Lista"):
 # Botão para resetar a lista (opcional, para testes)
 if st.button("Resetar Lista de Doações"):
     st.session_state.donations = initial_donations_data
+    save_donations_to_firestore(st.session_state.donations) # Salva o estado inicial no Firestore
     st.success("Lista de doações resetada para o estado inicial.")
