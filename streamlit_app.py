@@ -1,97 +1,7 @@
-
 import streamlit as st
 import json
 import re
-
-# Simulação da chamada à API Gemini
-# Em um ambiente real, você faria uma requisição HTTP para a API Gemini
-# com o seu prompt e receberia a resposta.
-def call_gemini_api(prompt_text):
-    """
-    Simula uma chamada à API Gemini para extrair informações de doação.
-    Em um aplicativo real, esta função faria uma requisição HTTP para a API Gemini.
-    """
-    # Exemplo de como a API Gemini poderia responder para "Cristiane 6 litros de leite"
-    if "Cristiane 6 litros de leite" in prompt_text:
-        return {
-            "donor_name": "Cristiane",
-            "item": "Leite",
-            "quantity": 6,
-            "unit": "litros"
-        }
-    elif "Marraschi 2kg de Bacon" in prompt_text:
-        return {
-            "donor_name": "Marraschi",
-            "item": "Bacon",
-            "quantity": 2,
-            "unit": "quilos"
-        }
-    elif "Marraschi 2kg de Calabresa" in prompt_text:
-        return {
-            "donor_name": "Marraschi",
-            "item": "Calabresa",
-            "quantity": 2,
-            "unit": "quilos"
-        }
-    # Adicione mais exemplos ou use uma lógica mais robusta para simular
-    # a extração de informações para outros itens e formatos.
-    # Para fins de demonstração, vamos tentar extrair com regex se não for um dos exemplos fixos.
-    
-    # Tentativa de extração genérica usando regex para simulação
-    match = re.search(r"([A-Za-zÀ-ú\s]+)\s+(\d+)\s*([A-Za-zÀ-ú]+)\s+de\s+([A-Za-zÀ-ú\s]+)", prompt_text, re.IGNORECASE)
-    if match:
-        name = match.group(1).strip()
-        quantity = int(match.group(2))
-        unit = match.group(3).strip()
-        item = match.group(4).strip()
-        return {
-            "donor_name": name,
-            "item": item,
-            "quantity": quantity,
-            "unit": unit
-        }
-    
-    match = re.search(r"([A-Za-zÀ-ú\s]+)\s+(\d+)\s*([A-Za-zÀ-ú]+)", prompt_text, re.IGNORECASE)
-    if match:
-        name = match.group(1).strip()
-        quantity = int(match.group(2))
-        item_or_unit = match.group(3).strip()
-        
-        # Simple heuristic to guess if the last part is an item or unit
-        if item_or_unit.lower() in ["quilos", "litros", "pct", "vidro", "garrafas", "cartelas", "caixinhas"]:
-            # Assume the unit is given, and the item is implied by context (needs real LLM for this)
-            # For simulation, we'll need a way to map unit to item, or assume item is part of the prompt.
-            # This is where a real LLM shines. For now, let's return null for item if it's just unit.
-            return {
-                "donor_name": name,
-                "item": None, # Cannot infer item reliably without more context or a real LLM
-                "quantity": quantity,
-                "unit": item_or_unit
-            }
-        else:
-            # Assume the last part is the item, and unit needs to be inferred or is missing
-            return {
-                "donor_name": name,
-                "item": item_or_unit,
-                "quantity": quantity,
-                "unit": None # Unit needs to be inferred by real LLM
-            }
-    
-    return None # Fallback if no match
-
-def get_gemini_prompt(user_input):
-    """
-    Gera o prompt para a API Gemini para extrair informações de doação.
-    """
-    return f"""
-    Extraia o nome do doador, o item doado, e a quantidade (número e unidade) do seguinte texto.
-    Se uma unidade não for explicitamente mencionada, mas for implícita pelo item (por exemplo, 'litros' para 'leite', 'quilos' para 'arroz'), infira-a.
-    Se a unidade for "pct x 500g", a quantidade deve ser o número de pacotes e a unidade "pct".
-    Se a unidade for "garrafas x 2l", a quantidade deve ser o número de garrafas e a unidade "garrafas".
-    Responda no formato JSON com as chaves 'donor_name', 'item', 'quantity', 'unit'.
-    Se alguma informação estiver faltando ou não estiver clara, defina o valor como null.
-    Texto: '{user_input}'
-    """
+import requests # Importa a biblioteca requests para fazer chamadas HTTP
 
 # Estrutura inicial da lista de doações
 # Usamos um dicionário para facilitar a atualização e o rastreamento
@@ -133,6 +43,71 @@ initial_donations_data = {
 if 'donations' not in st.session_state:
     st.session_state.donations = initial_donations_data
 
+def get_gemini_prompt(user_input):
+    """
+    Gera o prompt para a API Gemini para extrair informações de doação.
+    """
+    return f"""
+    Extraia o nome do doador, o item doado, e a quantidade (número e unidade) do seguinte texto.
+    Se uma unidade não for explicitamente mencionada, mas for implícita pelo item (por exemplo, 'litros' para 'leite', 'quilos' para 'arroz'), infira-a.
+    Para itens como "Café", "Ervilha pct 500g", "Batata Palha pct 500g", considere a unidade como "pct".
+    Para itens como "Refrigerante", considere a unidade como "garrafas".
+    Responda no formato JSON com as chaves 'donor_name' (string), 'item' (string), 'quantity' (integer), 'unit' (string).
+    Se alguma informação estiver faltando ou não estiver clara, defina o valor como null.
+    Texto: '{user_input}'
+    """
+
+def call_gemini_api(prompt_text):
+    """
+    Chama a API Gemini para extrair informações de doação.
+    """
+    # A estrutura do chatHistory para o payload da API Gemini
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "donor_name": {"type": "STRING"},
+                    "item": {"type": "STRING"},
+                    "quantity": {"type": "INTEGER"},
+                    "unit": {"type": "STRING"}
+                },
+                "required": ["donor_name", "item", "quantity", "unit"] # Define campos obrigatórios
+            }
+        }
+    }
+    
+    # Placeholder para a chave da API. O ambiente do Canvas irá fornecê-la em tempo de execução.
+    apiKey = "" 
+    apiUrl = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={apiKey}"
+
+    try:
+        # Faz a requisição POST para a API Gemini
+        response = requests.post(apiUrl, headers={'Content-Type': 'application/json'}, data=json.dumps(payload))
+        response.raise_for_status() # Levanta um HTTPError para respostas de erro (4xx ou 5xx)
+        result = response.json()
+
+        # Verifica se a resposta da Gemini contém os dados esperados
+        if result.get("candidates") and result["candidates"][0].get("content") and result["candidates"][0]["content"].get("parts"):
+            json_string = result["candidates"][0]["content"]["parts"][0]["text"]
+            # A Gemini retorna o JSON como uma string, então precisamos fazer o parse
+            parsed_json = json.loads(json_string)
+            return parsed_json
+        else:
+            st.error(f"Estrutura de resposta inesperada da Gemini. Resposta completa: {result}")
+            return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro ao chamar a API Gemini: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        st.error(f"Erro ao decodificar a resposta JSON da Gemini: {e}. Resposta bruta: {response.text}")
+        return None
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado: {e}")
+        return None
+
 def update_donation_list(donor_name, item, quantity, unit):
     """
     Atualiza a lista de doações com a nova doação.
@@ -143,7 +118,9 @@ def update_donation_list(donor_name, item, quantity, unit):
         normalized_key = key.lower().replace(" ", "").replace("nº8", "n8").replace("s/caroço", "semcaroco").replace("500g", "")
         normalized_item = item.lower().replace(" ", "").replace("nº8", "n8").replace("s/caroço", "semcaroco").replace("500g", "")
 
-        if normalized_item in normalized_key: # Verifica se o item doado é parte do nome do item na lista
+        # Verifica se o item doado é parte do nome do item na lista
+        # Usamos 'in' para permitir correspondências parciais (ex: "Leite" para "Leite")
+        if normalized_item in normalized_key: 
             # Adiciona a nova doação à lista de doadores para este item
             st.session_state.donations[key]["donated_by"].append({"name": donor_name, "quantity": quantity})
             item_found = True
@@ -210,13 +187,9 @@ user_input = st.text_input("Sua Doação:")
 
 if st.button("Registrar Doação"):
     if user_input:
-        # Simula a chamada à API Gemini
-        # Em um aplicativo real, você faria:
-        # gemini_prompt = get_gemini_prompt(user_input)
-        # response = call_gemini_api(gemini_prompt)
-        
-        # Usando a função de simulação
-        gemini_response = call_gemini_api(user_input)
+        with st.spinner('Processando doação com Gemini...'):
+            gemini_prompt = get_gemini_prompt(user_input)
+            gemini_response = call_gemini_api(gemini_prompt)
 
         if gemini_response and gemini_response.get("donor_name") and gemini_response.get("item") and gemini_response.get("quantity") is not None:
             donor_name = gemini_response["donor_name"]
@@ -230,7 +203,8 @@ if st.button("Registrar Doação"):
                 st.warning(f"Item '{item}' não encontrado na lista de doações. Por favor, verifique o nome do item.")
         else:
             st.error("Não foi possível extrair as informações da doação. Por favor, tente novamente com um formato mais claro.")
-            st.json(gemini_response) # Para depuração, mostre a resposta simulada
+            if gemini_response:
+                st.json(gemini_response) # Para depuração, mostre a resposta da Gemini
     else:
         st.warning("Por favor, digite sua doação.")
 
