@@ -261,10 +261,11 @@ st.text_area("Lista de Doações", value=output_text_area_content, height=600, d
 # Botão para copiar o texto da área de saída
 if st.button("Copiar Lista"):
     # Código JavaScript para copiar o texto para a área de transferência
+    # Usamos json.dumps para escapar corretamente a string para JavaScript
     js_code = f"""
     <script>
         function copyText() {{
-            var text = `{output_text_area_content.replace(/`/g, '\\`')}`; // Escapa backticks para JS
+            var text = {json.dumps(output_text_area_content)};
             var textArea = document.createElement("textarea");
             textArea.value = text;
             textArea.style.position = "fixed"; // Evita rolagem para o final
@@ -273,8 +274,6 @@ if st.button("Copiar Lista"):
             textArea.select();
             try {{
                 var successful = document.execCommand('copy');
-                // Não há comunicação direta JS para Python para alertas simples aqui,
-                // então o Streamlit exibirá uma mensagem de sucesso após o clique do botão.
             }} catch (err) {{
                 console.error('Erro ao copiar: ', err);
             }}
