@@ -47,40 +47,71 @@ if 'donations' not in st.session_state:
 def get_gemini_prompt(user_input):
     """
     Gera o prompt para a API Gemini para extrair informações de doação.
+    Este prompt agora solicita uma ARRAY de doações.
     """
     return f"""
-    Extraia o nome do doador, o item doado, e a quantidade (número e unidade) do seguinte texto.
+    Extraia todas as doações do seguinte texto. Para cada doação, identifique o nome do doador, o item doado, e a quantidade (número e unidade).
     Se uma unidade não for explicitamente mencionada, mas for implícita pelo item (por exemplo, 'litros' para 'leite', 'quilos' para 'arroz'), infira-a.
     Para itens como "Café", "Ervilha pct 500g", "Batata Palha pct 500g", considere a unidade como "pct".
     Para itens como "Refrigerante", considere a unidade como "garrafas".
-    Responda no formato JSON com as chaves 'donor_name' (string), 'item' (string), 'quantity' (integer), 'unit' (string).
-    Se alguma informação estiver faltando ou não estiver clara, defina o valor como null.
-    Texto: '{user_input}'
+    Responda no formato JSON como uma ARRAY de objetos, onde cada objeto tem as chaves 'donor_name' (string), 'item' (string), 'quantity' (integer), 'unit' (string).
+    Se alguma informação estiver faltando ou não estiver clara para uma doação específica, defina o valor como null para aquela propriedade.
+    Exemplo de entrada: "Fátima Ramos 2 garrafa de vinagre e 2 óleo de soja\nRei: 10 kg Arroz e 01 pacote de 500 g de café"
+    Exemplo de saída JSON:
+    [
+      {{
+        "donor_name": "Fátima Ramos",
+        "item": "vinagre",
+        "quantity": 2,
+        "unit": "garrafas"
+      }},
+      {{
+        "donor_name": "Fátima Ramos",
+        "item": "óleo de soja",
+        "quantity": 2,
+        "unit": "garrafas"
+      }},
+      {{
+        "donor_name": "Rei",
+        "item": "Arroz",
+        "quantity": 10,
+        "unit": "quilos"
+      }},
+      {{
+        "donor_name": "Rei",
+        "item": "café",
+        "quantity": 1,
+        "unit": "pct"
+      }}
+    ]
+    Texto a ser processado: '{user_input}'
     """
 
 def call_gemini_api(prompt_text):
     """
     Chama a API Gemini para extrair informações de doação.
+    Espera uma ARRAY de objetos JSON como resposta.
     """
-    # A estrutura do chatHistory para o payload da API Gemini
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
         "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-                "type": "OBJECT",
-                "properties": {
-                    "donor_name": {"type": "STRING"},
-                    "item": {"type": "STRING"},
-                    "quantity": {"type": "INTEGER"},
-                    "unit": {"type": "STRING"}
-                },
-                "required": ["donor_name", "item", "quantity", "unit"] # Define campos obrigatórios
+                "type": "ARRAY", # Agora esperando uma ARRAY
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "donor_name": {"type": "STRING"},
+                        "item": {"type": "STRING"},
+                        "quantity": {"type": "INTEGER"},
+                        "unit": {"type": "STRING"}
+                    },
+                    "required": ["donor_name", "item", "quantity", "unit"]
+                }
             }
         }
     }
     
-    # Obtém a chave da API das variáveis de ambiente do Streamlit Secrets
     try:
         apiKey = st.secrets["GEMINI_API_KEY"]
     except KeyError:
@@ -90,16 +121,17 @@ def call_gemini_api(prompt_text):
     apiUrl = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={apiKey}"
 
     try:
-        # Faz a requisição POST para a API Gemini
         response = requests.post(apiUrl, headers={'Content-Type': 'application/json'}, data=json.dumps(payload))
-        response.raise_for_status() # Levanta um HTTPError para respostas de erro (4xx ou 5xx)
+        response.raise_for_status()
         result = response.json()
 
-        # Verifica se a resposta da Gemini contém os dados esperados
         if result.get("candidates") and result["candidates"][0].get("content") and result["candidates"][0]["content"].get("parts"):
             json_string = result["candidates"][0]["content"]["parts"][0]["text"]
-            # A Gemini retorna o JSON como uma string, então precisamos fazer o parse
             parsed_json = json.loads(json_string)
+            
+            # Garante que a resposta seja sempre uma lista, mesmo que Gemini retorne um único objeto
+            if not isinstance(parsed_json, list):
+                parsed_json = [parsed_json]
             return parsed_json
         else:
             st.error(f"Estrutura de resposta inesperada da Gemini. Resposta completa: {result}")
@@ -125,9 +157,7 @@ def update_donation_list(donor_name, item, quantity, unit):
         normalized_item = item.lower().replace(" ", "").replace("nº8", "n8").replace("s/caroço", "semcaroco").replace("500g", "")
 
         # Verifica se o item doado é parte do nome do item na lista
-        # Usamos 'in' para permitir correspondências parciais (ex: "Leite" para "Leite")
         if normalized_item in normalized_key: 
-            # Adiciona a nova doação à lista de doadores para este item
             st.session_state.donations[key]["donated_by"].append({"name": donor_name, "quantity": quantity})
             item_found = True
             break
@@ -138,7 +168,7 @@ def generate_display_text():
     Gera o texto formatado da lista de doações.
     """
     header = """
-🚨🚨🚨 MUITA ATENÇÃO 🚨🚨🚨
+🚨🚨🚨 MUITA ATENÇÃO 🚨�🚨
 " ... até aqui o SENHOR nos ajudou... "   -     1 Samuel 7:12
 
 Amados irmãos,  sobre  o CUR Masculino que acontecerá nos dias 06, 07 e 08 de junho peço o comprometimento de todos (mulheres,  homens e jovens) na conquista desses itens que abaixo compartilho com vocês:
@@ -188,30 +218,37 @@ Muito obrigado! 
 # Título da aplicação Streamlit
 st.title("Sistema de Doações")
 
-# Alteração para text_area com o novo texto de instrução
 st.write("Digite o nome do doador e o que foi doado (ex: 'Fulano 6 litros de leite ou Sicrano 2kg de açúcar'):")
-user_input = st.text_area("Sua Doação:", height=100) # text_area para múltiplas linhas
+user_input = st.text_area("Sua Doação:", height=150) # Aumentei a altura para melhor visualização
 
 if st.button("Registrar Doação"):
     if user_input:
-        with st.spinner('Processando doação com Gemini...'):
+        with st.spinner('Processando doação(ões) com Gemini...'):
             gemini_prompt = get_gemini_prompt(user_input)
-            gemini_response = call_gemini_api(gemini_prompt)
+            list_of_gemini_responses = call_gemini_api(gemini_prompt) # Agora espera uma lista
 
-        if gemini_response and gemini_response.get("donor_name") and gemini_response.get("item") and gemini_response.get("quantity") is not None:
-            donor_name = gemini_response["donor_name"]
-            item = gemini_response["item"]
-            quantity = gemini_response["quantity"]
-            unit = gemini_response.get("unit", "") # Pode ser null se a Gemini não inferir
+        if list_of_gemini_responses:
+            donations_processed_count = 0
+            for donation_info in list_of_gemini_responses:
+                donor_name = donation_info.get("donor_name")
+                item = donation_info.get("item")
+                quantity = donation_info.get("quantity")
+                unit = donation_info.get("unit", "")
 
-            if update_donation_list(donor_name, item, quantity, unit):
-                st.success(f"Doação de {donor_name} para {quantity} {unit} de {item} registrada com sucesso!")
-            else:
-                st.warning(f"Item '{item}' não encontrado na lista de doações. Por favor, verifique o nome do item.")
+                if donor_name and item and quantity is not None:
+                    if update_donation_list(donor_name, item, quantity, unit):
+                        st.success(f"Doação de {donor_name} para {quantity} {unit} de {item} registrada com sucesso!")
+                        donations_processed_count += 1
+                    else:
+                        st.warning(f"Item '{item}' não encontrado na lista de doações. Por favor, verifique o nome do item.")
+                else:
+                    st.warning(f"Não foi possível extrair todas as informações de uma doação. Detalhes: {donation_info}")
+            
+            if donations_processed_count == 0:
+                st.error("Nenhuma doação válida foi extraída do texto. Por favor, tente novamente com um formato mais claro.")
         else:
-            st.error("Não foi possível extrair as informações da doação. Por favor, tente novamente com um formato mais claro.")
-            if gemini_response:
-                st.json(gemini_response) # Para depuração, mostre a resposta da Gemini
+            st.error("Não foi possível processar as doações. A resposta da Gemini estava vazia ou inválida.")
+            
     else:
         st.warning("Por favor, digite sua doação.")
 
