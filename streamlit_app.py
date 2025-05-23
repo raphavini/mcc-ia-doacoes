@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import re
 import requests # Importa a biblioteca requests para fazer chamadas HTTP
+import os # Importa a biblioteca os para acessar variáveis de ambiente
 
 # Estrutura inicial da lista de doações
 # Usamos um dicionário para facilitar a atualização e o rastreamento
@@ -79,8 +80,16 @@ def call_gemini_api(prompt_text):
         }
     }
     
-    # Placeholder para a chave da API. O ambiente do Canvas irá fornecê-la em tempo de execução.
-    apiKey = "" 
+    # Obtém a chave da API das variáveis de ambiente do Streamlit Secrets
+    # Para o desenvolvimento local, você pode criar um arquivo .streamlit/secrets.toml
+    # com o conteúdo: GEMINI_API_KEY="SUA_CHAVE_AQUI"
+    # Para implantação no Streamlit Cloud, configure os segredos diretamente na plataforma.
+    try:
+        apiKey = st.secrets["GEMINI_API_KEY"]
+    except KeyError:
+        st.error("Chave de API Gemini não encontrada. Por favor, configure 'GEMINI_API_KEY' em seus segredos do Streamlit.")
+        return None
+
     apiUrl = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={apiKey}"
 
     try:
@@ -182,7 +191,7 @@ Muito obrigado! 
 # Título da aplicação Streamlit
 st.title("Sistema de Doações")
 
-st.write("Digite o nome do doador e o que foi doado (ex: 'Fulano 6 litros de leite ou Sicrano 2kg de açúcar'):")
+st.write("Digite o nome do doador e o que foi doado  (ex: 'Fulano 6 litros de leite ou Sicrano 2kg de açúcar'):")
 user_input = st.text_input("Sua Doação:")
 
 if st.button("Registrar Doação"):
