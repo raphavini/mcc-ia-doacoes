@@ -3,6 +3,7 @@ import json
 import re
 import requests # Importa a biblioteca requests para fazer chamadas HTTP
 import os # Importa a biblioteca os para acessar variáveis de ambiente
+import streamlit.components.v1 as components # Importa para injetar JavaScript
 
 # Estrutura inicial da lista de doações
 # Usamos um dicionário para facilitar a atualização e o rastreamento
@@ -56,7 +57,7 @@ def get_gemini_prompt(user_input):
     Para itens como "Refrigerante", considere a unidade como "garrafas".
     Responda no formato JSON como uma ARRAY de objetos, onde cada objeto tem as chaves 'donor_name' (string), 'item' (string), 'quantity' (integer), 'unit' (string).
     Se alguma informação estiver faltando ou não estiver clara para uma doação específica, defina o valor como null para aquela propriedade.
-    Exemplo de entrada: "Fátima Ramos 2 garrafa de vinagre e 2 óleo de soja\nRei: 10 kg Arroz e 01 pacote de 500 g de café"
+    Exemplo de entrada: "Fátima Ramos 2 garrafa de vinagre e 2 óleo de soja\\nRei: 10 kg Arroz e 01 pacote de 500 g de café"
     Exemplo de saída JSON:
     [
       {{
@@ -168,7 +169,7 @@ def generate_display_text():
     Gera o texto formatado da lista de doações.
     """
     header = """
-🚨🚨🚨 MUITA ATENÇÃO 🚨�🚨
+🚨🚨🚨 MUITA ATENÇÃO 🚨🚨🚨
 " ... até aqui o SENHOR nos ajudou... "   -     1 Samuel 7:12
 
 Amados irmãos,  sobre  o CUR Masculino que acontecerá nos dias 06, 07 e 08 de junho peço o comprometimento de todos (mulheres,  homens e jovens) na conquista desses itens que abaixo compartilho com vocês:
@@ -254,7 +255,36 @@ if st.button("Registrar Doação"):
 
 st.markdown("---")
 st.subheader("Lista de Doações Atualizada")
-st.text_area("Lista de Doações", value=generate_display_text(), height=600, disabled=True)
+output_text_area_content = generate_display_text()
+st.text_area("Lista de Doações", value=output_text_area_content, height=600, disabled=True)
+
+# Botão para copiar o texto da área de saída
+if st.button("Copiar Lista"):
+    # Código JavaScript para copiar o texto para a área de transferência
+    js_code = f"""
+    <script>
+        function copyText() {{
+            var text = `{output_text_area_content.replace(/`/g, '\\`')}`; // Escapa backticks para JS
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; // Evita rolagem para o final
+            textArea.style.left = "-9999px"; // Esconde o elemento
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {{
+                var successful = document.execCommand('copy');
+                // Não há comunicação direta JS para Python para alertas simples aqui,
+                // então o Streamlit exibirá uma mensagem de sucesso após o clique do botão.
+            }} catch (err) {{
+                console.error('Erro ao copiar: ', err);
+            }}
+            document.body.removeChild(textArea);
+        }}
+        copyText(); // Chama a função imediatamente quando o componente é renderizado
+    </script>
+    """
+    components.html(js_code, height=0, width=0) # height e width 0 para esconder o componente HTML
+    st.success("Texto copiado para a área de transferência!")
 
 # Botão para resetar a lista (opcional, para testes)
 if st.button("Resetar Lista de Doações"):
