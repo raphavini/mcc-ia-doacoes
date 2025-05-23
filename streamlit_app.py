@@ -38,7 +38,7 @@ if not firebase_admin._apps:
         st.stop() # Para a execução do app se o Firebase não puder ser inicializado
 
 db = firestore.client()
-app_id = os.environ.get('__app_id', 'default-app-id') # Obtém o ID do app do ambiente Canvas
+app_id = os.environ.get('__app_id', 'default-app-id') # Obtém o ID do app do app_id do ambiente Canvas
 
 # Caminho para o documento no Firestore onde a lista de doações será armazenada
 # Usamos o app_id para isolar os dados deste aplicativo específico
@@ -329,15 +329,22 @@ st.text_area("Lista de Doações", value=output_text_area_content, height=600, d
 if st.button("Copiar Lista"):
     # Código JavaScript para copiar o texto para a área de transferência
     # Usamos json.dumps para escapar corretamente a string para JavaScript
+    # e garantimos que o textarea seja temporariamente visível para o comando de cópia.
     js_code = f"""
     <script>
         function copyText() {{
             var text = {json.dumps(output_text_area_content)};
             var textArea = document.createElement("textarea");
             textArea.value = text;
-            textArea.style.position = "fixed"; // Evita rolagem para o final
-            textArea.style.left = "-9999px"; // Esconde o elemento
+            // Torna o textarea temporariamente visível e selecionável
+            textArea.style.position = "absolute";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            textArea.style.opacity = "0";
+            textArea.style.width = "1px";
+            textArea.style.height = "1px";
             document.body.appendChild(textArea);
+            textArea.focus(); // Tenta focar o elemento
             textArea.select();
             try {{
                 var successful = document.execCommand('copy');
@@ -352,8 +359,4 @@ if st.button("Copiar Lista"):
     components.html(js_code, height=0, width=0) # height e width 0 para esconder o componente HTML
     st.success("Texto copiado para a área de transferência!")
 
-# Botão para resetar a lista (opcional, para testes)
-if st.button("Resetar Lista de Doações"):
-    st.session_state.donations = initial_donations_data
-    save_donations_to_firestore(st.session_state.donations) # Salva o estado inicial no Firestore
-    st.success("Lista de doações resetada para o estado inicial.")
+# O botão para resetar a lista de doações foi removido conforme solicitado.
